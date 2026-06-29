@@ -10,9 +10,9 @@ from pathlib import Path
 import numpy as np
 from io import BytesIO
 
-# Initialize annotators
-bounding_box_annotator = sv.BoundingBoxAnnotator()
-label_annotator = sv.LabelAnnotator()
+# Initialize annotators (commented out as they are unused and caused import errors)
+# bounding_box_annotator = sv.BoxAnnotator()
+# label_annotator = sv.LabelAnnotator()
 
 # Setting page layout
 st.set_page_config(
@@ -38,13 +38,23 @@ confidence = st.sidebar.slider(
 source_type = st.sidebar.radio("Select Source Type", ["Image", "Video"])
 model_choice = st.sidebar.radio("Select Model", ["Model"])
 
+# Device Configuration
+if torch.cuda.is_available():
+    device_options = ["GPU (CUDA)", "CPU"]
+    device_choice = st.sidebar.selectbox("Select Inference Device", device_options)
+    device = 0 if device_choice == "GPU (CUDA)" else "cpu"
+    st.sidebar.success(f"GPU Active: {torch.cuda.get_device_name(0)}")
+else:
+    st.sidebar.warning("GPU not detected. Running on CPU.")
+    device = "cpu"
+
 # Load YOLO model
 @st.cache_resource
 def main_model():
     model = YOLO('best.pt')
     return model
 
-def process_uploaded_video(video_bytes):
+def process_uploaded_video(video_bytes, device="cpu"):
     # Create a temporary file to store the uploaded video
     with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmpfile:
         tmpfile.write(video_bytes)
@@ -82,7 +92,7 @@ def process_uploaded_video(video_bytes):
                 break
                 
             # Process frame
-            results = model(frame, conf=confidence)
+            results = model(frame, conf=confidence, device=device)
             processed_frame = results[0].plot()
             
             # Update class counts
@@ -138,7 +148,7 @@ if source_type == "Image":
                 results = model(
                     source=uploaded_image,
                     conf=confidence,
-                    device="cpu"
+                    device=device
                 )
                 boxes = results[0].boxes
                 res_plotted = results[0].plot()[:, :, ::-1]
@@ -185,7 +195,7 @@ else:  # Video processing
         if st.sidebar.button('Detect'):
             try:
                 # Process video
-                processed_video_bytes, total_class_counts = process_uploaded_video(video_bytes)
+                processed_video_bytes, total_class_counts = process_uploaded_video(video_bytes, device=device)
                 
                 # Display detection statistics
                 st.write("Total detections throughout the video:")
